@@ -7,7 +7,7 @@
 .spif-pbadge { display: inline-block; background: #1A1A1A; color: white; font-size: 11px; font-family: 'DM Mono', monospace; padding: 3px 8px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
 .spif-sbadge { display: inline-block; background: #E2DFD8; color: #6B6860; font-size: 10px; font-family: 'DM Mono', monospace; padding: 2px 7px; border-radius: 4px; margin-left: 4px; vertical-align: middle; }
 .spif-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-.spif-card { background: #FFFFFF; border-radius: 16px; padding: 20px 16px 24px; display: flex; flex-direction: column; align-items: center; border: 1px solid #E2DFD8; position: relative; overflow: hidden; }
+.spif-card { background: #FFFFFF; border-radius: 16px; padding: 20px 16px 16px; display: flex; flex-direction: column; align-items: center; border: 1px solid #E2DFD8; position: relative; overflow: hidden; }
 .spif-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--spif-accent); }
 .spif-card-title { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #6B6860; margin-bottom: 16px; text-align: center; min-height: 28px; display: flex; align-items: center; justify-content: center; }
 .spif-thermo-outer { position: relative; width: 64px; height: 200px; margin-bottom: 16px; }
@@ -30,10 +30,20 @@
 .spif-ontrack { background: #E6F1FB; color: #185FA5; }
 .spif-watch   { background: #FAEEDA; color: #854F0B; }
 .spif-behind  { background: #FAECE7; color: #993C1D; }
-.spif-footer { text-align: center; font-size: 11px; color: #6B6860; margin-top: 20px; font-family: 'DM Mono', monospace; }
+.spif-footer  { text-align: center; font-size: 11px; color: #6B6860; margin-top: 20px; font-family: 'DM Mono', monospace; }
 .spif-tick { position: absolute; left: 4px; display: flex; align-items: center; gap: 3px; }
 .spif-tick-line { width: 5px; height: 1px; background: #CCC; }
 .spif-tick-lbl { font-family: 'DM Mono', monospace; font-size: 8px; color: #BBB; }
+.spif-timeline { width: 100%; margin-top: 12px; border-top: 1px solid #E2DFD8; padding-top: 10px; }
+.spif-tl-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 2px; }
+.spif-tl-item { display: flex; flex-direction: column; align-items: center; flex: 1; }
+.spif-tl-dot { width: 6px; height: 6px; border-radius: 50%; margin-bottom: 3px; flex-shrink: 0; }
+.spif-tl-dot-done { background: #0F6E56; }
+.spif-tl-dot-curr { width: 8px; height: 8px; }
+.spif-tl-dot-next { background: #D5D2CB; }
+.spif-tl-label { font-family: 'DM Mono', monospace; font-size: 8px; color: #6B6860; line-height: 1; }
+.spif-tl-label-done { color: #0F6E56; }
+.spif-tl-obj { font-family: 'DM Mono', monospace; font-size: 7px; color: #BBB; line-height: 1; margin-top: 2px; }
 </style>
 
 <div class="spif-wrap">
@@ -51,6 +61,7 @@
 var SPIF_CONFIG = {
   periodeActuelle: 'P02',
   semaineActuelle: 'S01',
+  periodeNum: 2,
   semainesTotalesAccomplies: 4
 };
 var SPIF_VENTES = { PAB: 1114, SOJU: 970, SPIRITUEUX: 2134, VIN: 172 };
@@ -83,6 +94,48 @@ function spifObjDate(cat, sem) {
   return Math.round(obj * pct / 100);
 }
 
+function formatK(n) {
+  if (n >= 1000) return (Math.round(n / 100) / 10) + 'k';
+  return n.toString();
+}
+
+function spifTimeline(cat, color) {
+  var s = SPIF_SAISON[cat];
+  var obj = SPIF_CATS.find(function(c){ return c.key === cat; }).obj;
+  var currNum = SPIF_CONFIG.periodeNum;
+  var periods = ['P01','P02','P03','P04','P05','P06','P07'];
+
+  // Cible par période individuelle (non cumulée)
+  var perPeriode = [];
+  for (var i = 0; i < 7; i++) {
+    var pctCumul = s[i];
+    var pctPrev = i === 0 ? 0 : s[i-1];
+    perPeriode.push(Math.round(obj * (pctCumul - pctPrev) / 100));
+  }
+
+  var html = '<div class="spif-timeline"><div class="spif-tl-row">';
+  for (var i = 0; i < 7; i++) {
+    var pNum = i + 1;
+    var isDone = pNum < currNum;
+    var isCurr = pNum === currNum;
+    var dotStyle = isCurr
+      ? 'background:' + color + ';box-shadow:0 0 0 2px rgba(0,0,0,0.1);'
+      : '';
+    var dotClass = 'spif-tl-dot ' + (isDone ? 'spif-tl-dot-done' : (isCurr ? 'spif-tl-dot-curr' : 'spif-tl-dot-next'));
+    var lblStyle = isDone ? 'color:#0F6E56;' : (isCurr ? 'color:' + color + ';font-weight:600;' : '');
+    var objStyle = isCurr ? 'color:' + color + ';opacity:0.85;' : '';
+    var lbl = isDone ? '✓' : periods[i];
+
+    html += '<div class="spif-tl-item">'
+      + '<div class="' + dotClass + '" style="' + dotStyle + '"></div>'
+      + '<div class="spif-tl-label" style="' + lblStyle + '">' + lbl + '</div>'
+      + '<div class="spif-tl-obj" style="' + objStyle + '">' + formatK(perPeriode[i]) + '</div>'
+      + '</div>';
+  }
+  html += '</div></div>';
+  return html;
+}
+
 function spifCard(cat, ventes) {
   var c = SPIF_CATS.find(function(x){ return x.key === cat; });
   var objFinal = c.obj;
@@ -107,6 +160,13 @@ function spifCard(cat, ventes) {
     var py = Math.round(t / 100 * trackH);
     return '<div class="spif-tick" style="bottom:' + (14+py) + 'px"><div class="spif-tick-line"></div><span class="spif-tick-lbl">' + t + '%</span></div>';
   }).join('');
+
+  var perComplete = Math.floor(SPIF_CONFIG.semainesTotalesAccomplies / 4);
+  var semRest = SPIF_CONFIG.semainesTotalesAccomplies % 4;
+  var cibleLabel = semRest === 0
+    ? 'Cible fin P0' + perComplete
+    : 'Cible ' + SPIF_CONFIG.periodeActuelle + '-' + SPIF_CONFIG.semaineActuelle;
+
   return '<div class="spif-card" style="--spif-accent:' + c.color + '">'
     + '<div class="spif-card-title">' + c.label + '</div>'
     + '<div class="spif-thermo-outer">'
@@ -119,9 +179,10 @@ function spifCard(cat, ventes) {
     + '<div class="spif-caisses-reel">' + v.toLocaleString('fr-CA') + ' caisses</div>'
     + '<div class="spif-caisses-obj">objectif final : ' + objFinal.toLocaleString('fr-CA') + '</div>'
     + '<div class="spif-divider"></div>'
-    + '<div class="spif-row"><span class="spif-lbl">Cible à date</span><span class="spif-val">' + objDate.toLocaleString('fr-CA') + '</span></div>'
-    + '<div class="spif-row"><span class="spif-lbl">Écart</span><span class="spif-val" style="color:' + ecartColor + '">' + ecartStr + ' caisses</span></div>'
+    + '<div class="spif-row"><span class="spif-lbl">' + cibleLabel + '</span><span class="spif-val">' + objDate.toLocaleString('fr-CA') + '</span></div>'
+    + '<div class="spif-row"><span class="spif-lbl">Écart vs cible</span><span class="spif-val" style="color:' + ecartColor + '">' + ecartStr + ' caisses</span></div>'
     + '<div class="spif-row" style="margin-top:8px;justify-content:center"><span class="spif-badge ' + badgeClass + '">' + badgeTxt + '</span></div>'
+    + spifTimeline(cat, c.color)
     + '</div>';
 }
 

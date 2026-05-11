@@ -31,6 +31,7 @@
 .spif-watch   { background: #FAEEDA; color: #854F0B; }
 .spif-behind  { background: #FAECE7; color: #993C1D; }
 .spif-footer  { text-align: center; font-size: 11px; color: #6B6860; margin-top: 20px; font-family: 'DM Mono', monospace; }
+.spif-loading { text-align: center; padding: 60px 20px; color: #6B6860; font-size: 14px; }
 .spif-tick { position: absolute; left: 4px; display: flex; align-items: center; gap: 3px; }
 .spif-tick-line { width: 5px; height: 1px; background: #CCC; }
 .spif-tick-lbl { font-family: 'DM Mono', monospace; font-size: 8px; color: #BBB; }
@@ -42,7 +43,6 @@
 .spif-tl-dot-curr { width: 8px; height: 8px; }
 .spif-tl-dot-next { background: #D5D2CB; }
 .spif-tl-label { font-family: 'DM Mono', monospace; font-size: 8px; color: #6B6860; line-height: 1; }
-.spif-tl-label-done { color: #0F6E56; }
 .spif-tl-obj { font-family: 'DM Mono', monospace; font-size: 7px; color: #BBB; line-height: 1; margin-top: 2px; }
 </style>
 
@@ -53,18 +53,29 @@
     </div>
     <div class="spif-meta" id="spif-date">—</div>
   </div>
-  <div class="spif-grid" id="spif-grid"></div>
+  <div id="spif-loading" class="spif-loading">Chargement des données Zoho...</div>
+  <div class="spif-grid" id="spif-grid" style="display:none"></div>
   <div class="spif-footer" id="spif-footer"></div>
 </div>
 
 <script>
+// ════════════════════════════════════════════════════
+// CONFIG — 3 valeurs à mettre à jour chaque lundi
+// ════════════════════════════════════════════════════
 var SPIF_CONFIG = {
   periodeActuelle: 'P02',
   semaineActuelle: 'S03',
   periodeNum: 2,
   semainesTotalesAccomplies: 5
 };
-var SPIF_VENTES = { PAB: 1114, SOJU: 970, SPIRITUEUX: 2134, VIN: 172 };
+
+// URLs publiques Zoho Analytics
+var URL_DISTIL = 'https://analytics.zoho.com/open-view/2367878000025909568/790c596c2bfd4180598a15bf1de05ac0717c75dba33fa7a74713d4d55e24af1c';
+var URL_VIN    = 'https://analytics.zoho.com/open-view/2367878000025909587/6f13e400e9c57e2766f89b69eef3d81cadc80eb1a70373243e5db5b2ff2e1102';
+
+// ════════════════════════════════════════════════════
+// DONNÉES FIXES
+// ════════════════════════════════════════════════════
 var SPIF_CATS = [
   { key: 'PAB',        label: 'Prêt à boire<br>hors Labatt', color: '#2E6FD9', obj: 15068 },
   { key: 'SOJU',       label: 'Soju',                        color: '#16A87C', obj: 7608  },
@@ -78,6 +89,62 @@ var SPIF_SAISON = {
   VIN:        [13.0, 26.7, 41.2, 56.5, 71.0, 85.5, 100]
 };
 
+// ════════════════════════════════════════════════════
+// FETCH DONNÉES VIA IFRAME (contourne CORS)
+// ════════════════════════════════════════════════════
+function fetchZohoPublic(url) {
+  return new Promise(function(resolve) {
+    // Zoho open-view public — on parse le HTML via iframe caché
+    var iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.style.width = '1px';
+    iframe.style.height = '1px';
+    
+    // Utilise l'URL d'export CSV de Zoho Analytics
+    var exportUrl = url + '?tqx=out:csv';
+    
+    fetch(exportUrl)
+      .then(function(r) { return r.text(); })
+      .then(function(csv) {
+        resolve(parseCSV(csv));
+      })
+      .catch(function() {
+        resolve(null);
+      });
+  });
+}
+
+function parseCSV(csv) {
+  var ventes = { PAB: 0, SOJU: 0, SPIRITUEUX: 0, VIN: 0 };
+  try {
+    var lines = csv.trim().split('\n');
+    if (lines.length < 2) return null;
+    // Trouver les colonnes
+    var headers = lines[0].split(',').map(function(h) {
+      return h.replace(/"/g,'').trim().toLowerCase();
+    });
+    var idxCat = -1, idxVal = -1;
+    for (var i = 0; i < headers.length; i++) {
+      if (headers[i] === 'categorie') idxCat = i;
+      if (headers[i] === 'ventes_caisses') idxVal = i;
+    }
+    if (idxCat === -1 || idxVal === -1) return null;
+    
+    for (var r = 1; r < lines.length; r++) {
+      var cols = lines[r].split(',').map(function(c) { return c.replace(/"/g,'').trim(); });
+      var cat = cols[idxCat].toUpperCase();
+      var val = parseFloat(cols[idxVal]) || 0;
+      if (ventes.hasOwnProperty(cat)) ventes[cat] += val;
+    }
+    return ventes;
+  } catch(e) {
+    return null;
+  }
+}
+
+// ════════════════════════════════════════════════════
+// RENDER
+// ════════════════════════════════════════════════════
 function spifObjDate(cat, sem) {
   var s = SPIF_SAISON[cat];
   var obj = SPIF_CATS.find(function(c){ return c.key === cat; }).obj;
@@ -86,17 +153,12 @@ function spifObjDate(cat, sem) {
   var pct;
   if (perComplete === 0) { pct = s[0] * (semRest / 4); }
   else if (perComplete >= 7) { pct = 100; }
-  else {
-    var pctFin = s[perComplete - 1];
-    var pctNext = s[perComplete];
-    pct = pctFin + (pctNext - pctFin) * (semRest / 4);
-  }
+  else { pct = s[perComplete-1] + (s[perComplete] - s[perComplete-1]) * (semRest/4); }
   return Math.round(obj * pct / 100);
 }
 
 function formatK(n) {
-  if (n >= 1000) return (Math.round(n / 100) / 10) + 'k';
-  return n.toString();
+  return n >= 1000 ? (Math.round(n/100)/10)+'k' : n.toString();
 }
 
 function spifTimeline(cat, color) {
@@ -104,91 +166,93 @@ function spifTimeline(cat, color) {
   var obj = SPIF_CATS.find(function(c){ return c.key === cat; }).obj;
   var currNum = SPIF_CONFIG.periodeNum;
   var periods = ['P01','P02','P03','P04','P05','P06','P07'];
-
-  // Cible par période individuelle (non cumulée)
   var perPeriode = [];
   for (var i = 0; i < 7; i++) {
-    var pctCumul = s[i];
-    var pctPrev = i === 0 ? 0 : s[i-1];
-    perPeriode.push(Math.round(obj * (pctCumul - pctPrev) / 100));
+    perPeriode.push(Math.round(obj * (s[i] - (i===0?0:s[i-1])) / 100));
   }
-
   var html = '<div class="spif-timeline"><div class="spif-tl-row">';
   for (var i = 0; i < 7; i++) {
-    var pNum = i + 1;
-    var isDone = pNum < currNum;
-    var isCurr = pNum === currNum;
-    var dotStyle = isCurr
-      ? 'background:' + color + ';box-shadow:0 0 0 2px rgba(0,0,0,0.1);'
-      : '';
-    var dotClass = 'spif-tl-dot ' + (isDone ? 'spif-tl-dot-done' : (isCurr ? 'spif-tl-dot-curr' : 'spif-tl-dot-next'));
-    var lblStyle = isDone ? 'color:#0F6E56;' : (isCurr ? 'color:' + color + ';font-weight:600;' : '');
-    var objStyle = isCurr ? 'color:' + color + ';opacity:0.85;' : '';
-    var lbl = isDone ? '✓' : periods[i];
-
+    var pNum = i+1;
+    var isDone = pNum < currNum, isCurr = pNum === currNum;
+    var dotStyle = isCurr ? 'background:'+color+';box-shadow:0 0 0 2px rgba(0,0,0,0.1);' : '';
+    var dotClass = 'spif-tl-dot '+(isDone?'spif-tl-dot-done':(isCurr?'spif-tl-dot-curr':'spif-tl-dot-next'));
+    var lblStyle = isDone?'color:#0F6E56;':(isCurr?'color:'+color+';font-weight:600;':'');
+    var objStyle = isCurr?'color:'+color+';opacity:0.85;':'';
     html += '<div class="spif-tl-item">'
-      + '<div class="' + dotClass + '" style="' + dotStyle + '"></div>'
-      + '<div class="spif-tl-label" style="' + lblStyle + '">' + lbl + '</div>'
-      + '<div class="spif-tl-obj" style="' + objStyle + '">' + formatK(perPeriode[i]) + '</div>'
-      + '</div>';
+      +'<div class="'+dotClass+'" style="'+dotStyle+'"></div>'
+      +'<div class="spif-tl-label" style="'+lblStyle+'">'+(isDone?'✓':periods[i])+'</div>'
+      +'<div class="spif-tl-obj" style="'+objStyle+'">'+formatK(perPeriode[i])+'</div>'
+      +'</div>';
   }
-  html += '</div></div>';
-  return html;
+  return html+'</div></div>';
 }
 
 function spifCard(cat, ventes) {
-  var c = SPIF_CATS.find(function(x){ return x.key === cat; });
+  var c = SPIF_CATS.find(function(x){ return x.key===cat; });
   var objFinal = c.obj;
   var objDate = spifObjDate(cat, SPIF_CONFIG.semainesTotalesAccomplies);
   var v = Math.round(ventes);
-  var pctFinal = Math.min(100, Math.round(v / objFinal * 100));
+  var pctFinal = Math.min(100, Math.round(v/objFinal*100));
   var ecart = v - objDate;
-  var ratio = objDate > 0 ? v / objDate : 0;
+  var ratio = objDate > 0 ? v/objDate : 0;
   var badgeClass, badgeTxt;
-  if (ratio >= 1.10)      { badgeClass = 'spif-ahead';   badgeTxt = 'En avance'; }
-  else if (ratio >= 0.85) { badgeClass = 'spif-ontrack'; badgeTxt = 'Dans la cible'; }
-  else if (ratio >= 0.60) { badgeClass = 'spif-watch';   badgeTxt = 'À surveiller'; }
-  else                    { badgeClass = 'spif-behind';  badgeTxt = 'En retard'; }
-  var ecartStr = ecart >= 0 ? '+' + ecart.toLocaleString('fr-CA') : ecart.toLocaleString('fr-CA');
-  var ecartColor = ecart >= 0 ? '#0F6E56' : '#993C1D';
-  var trackH = 152;
-  var fillPx = Math.round(Math.min(pctFinal, 100) / 100 * trackH);
-  var targetPct = Math.min(100, objDate / objFinal * 100);
-  var targetPx = Math.round(targetPct / 100 * trackH);
-  var targetBottom = 14 + targetPx;
-  var ticks = [0, 25, 50, 75, 100].map(function(t) {
-    var py = Math.round(t / 100 * trackH);
-    return '<div class="spif-tick" style="bottom:' + (14+py) + 'px"><div class="spif-tick-line"></div><span class="spif-tick-lbl">' + t + '%</span></div>';
+  if (ratio>=1.10)      { badgeClass='spif-ahead';   badgeTxt='En avance'; }
+  else if (ratio>=0.85) { badgeClass='spif-ontrack'; badgeTxt='Dans la cible'; }
+  else if (ratio>=0.60) { badgeClass='spif-watch';   badgeTxt='À surveiller'; }
+  else                  { badgeClass='spif-behind';  badgeTxt='En retard'; }
+  var ecartStr = ecart>=0?'+'+ecart.toLocaleString('fr-CA'):ecart.toLocaleString('fr-CA');
+  var ecartColor = ecart>=0?'#0F6E56':'#993C1D';
+  var trackH=152, fillPx=Math.round(Math.min(pctFinal,100)/100*trackH);
+  var targetBottom = 14+Math.round(Math.min(100,objDate/objFinal*100)/100*trackH);
+  var ticks=[0,25,50,75,100].map(function(t){
+    return '<div class="spif-tick" style="bottom:'+(14+Math.round(t/100*trackH))+'px"><div class="spif-tick-line"></div><span class="spif-tick-lbl">'+t+'%</span></div>';
   }).join('');
-
-  var perComplete = Math.floor(SPIF_CONFIG.semainesTotalesAccomplies / 4);
-  var semRest = SPIF_CONFIG.semainesTotalesAccomplies % 4;
-  var cibleLabel = semRest === 0
-    ? 'Cible fin P0' + perComplete
-    : 'Cible ' + SPIF_CONFIG.periodeActuelle + '-' + SPIF_CONFIG.semaineActuelle;
-
-  return '<div class="spif-card" style="--spif-accent:' + c.color + '">'
-    + '<div class="spif-card-title">' + c.label + '</div>'
-    + '<div class="spif-thermo-outer">'
-    + ticks
-    + '<div class="spif-thermo-tube"><div class="spif-thermo-fill" style="height:' + fillPx + 'px"></div></div>'
-    + '<div class="spif-target-line" style="bottom:' + targetBottom + 'px"><div class="spif-target-inner"></div><div class="spif-target-lbl">← cible</div></div>'
-    + '<div class="spif-bulb"></div>'
-    + '</div>'
-    + '<div class="spif-pct-big">' + pctFinal + '<span>%</span></div>'
-    + '<div class="spif-caisses-reel">' + v.toLocaleString('fr-CA') + ' caisses</div>'
-    + '<div class="spif-caisses-obj">objectif final : ' + objFinal.toLocaleString('fr-CA') + '</div>'
-    + '<div class="spif-divider"></div>'
-    + '<div class="spif-row"><span class="spif-lbl">' + cibleLabel + '</span><span class="spif-val">' + objDate.toLocaleString('fr-CA') + '</span></div>'
-    + '<div class="spif-row"><span class="spif-lbl">Écart vs cible</span><span class="spif-val" style="color:' + ecartColor + '">' + ecartStr + ' caisses</span></div>'
-    + '<div class="spif-row" style="margin-top:8px;justify-content:center"><span class="spif-badge ' + badgeClass + '">' + badgeTxt + '</span></div>'
-    + spifTimeline(cat, c.color)
-    + '</div>';
+  var perComplete=Math.floor(SPIF_CONFIG.semainesTotalesAccomplies/4);
+  var semRest=SPIF_CONFIG.semainesTotalesAccomplies%4;
+  var cibleLabel=semRest===0?'Cible fin P0'+perComplete:'Cible '+SPIF_CONFIG.periodeActuelle+'-'+SPIF_CONFIG.semaineActuelle;
+  return '<div class="spif-card" style="--spif-accent:'+c.color+'">'
+    +'<div class="spif-card-title">'+c.label+'</div>'
+    +'<div class="spif-thermo-outer">'+ticks
+    +'<div class="spif-thermo-tube"><div class="spif-thermo-fill" style="height:'+fillPx+'px"></div></div>'
+    +'<div class="spif-target-line" style="bottom:'+targetBottom+'px"><div class="spif-target-inner"></div><div class="spif-target-lbl">← cible</div></div>'
+    +'<div class="spif-bulb"></div></div>'
+    +'<div class="spif-pct-big">'+pctFinal+'<span>%</span></div>'
+    +'<div class="spif-caisses-reel">'+v.toLocaleString('fr-CA')+' caisses</div>'
+    +'<div class="spif-caisses-obj">objectif final : '+objFinal.toLocaleString('fr-CA')+'</div>'
+    +'<div class="spif-divider"></div>'
+    +'<div class="spif-row"><span class="spif-lbl">'+cibleLabel+'</span><span class="spif-val">'+objDate.toLocaleString('fr-CA')+'</span></div>'
+    +'<div class="spif-row"><span class="spif-lbl">Écart vs cible</span><span class="spif-val" style="color:'+ecartColor+'">'+ecartStr+' caisses</span></div>'
+    +'<div class="spif-row" style="margin-top:8px;justify-content:center"><span class="spif-badge '+badgeClass+'">'+badgeTxt+'</span></div>'
+    +spifTimeline(cat, c.color)+'</div>';
 }
 
+function renderDashboard(ventes) {
+  document.getElementById('spif-loading').style.display = 'none';
+  var grid = document.getElementById('spif-grid');
+  grid.style.display = 'grid';
+  grid.innerHTML = SPIF_CATS.map(function(c){ return spifCard(c.key, ventes[c.key]||0); }).join('');
+  document.getElementById('spif-footer').textContent =
+    'Semaines accomplies : '+SPIF_CONFIG.semainesTotalesAccomplies+'/28 · Mis à jour automatiquement depuis Zoho Analytics';
+}
+
+// ════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════
 document.getElementById('spif-periode').textContent = SPIF_CONFIG.periodeActuelle;
 document.getElementById('spif-semaine').textContent = SPIF_CONFIG.semaineActuelle;
-document.getElementById('spif-date').textContent = new Date().toLocaleDateString('fr-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-document.getElementById('spif-grid').innerHTML = SPIF_CATS.map(function(c){ return spifCard(c.key, SPIF_VENTES[c.key]); }).join('');
-document.getElementById('spif-footer').textContent = 'Semaines accomplies : ' + SPIF_CONFIG.semainesTotalesAccomplies + '/28 · Données cumulatives depuis P01';
+document.getElementById('spif-date').textContent = new Date().toLocaleDateString('fr-CA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+Promise.all([
+  fetchZohoPublic(URL_DISTIL),
+  fetchZohoPublic(URL_VIN)
+]).then(function(results) {
+  var distil = results[0];
+  var vin    = results[1];
+  if (distil && vin) {
+    renderDashboard({ PAB: distil.PAB, SOJU: distil.SOJU, SPIRITUEUX: distil.SPIRITUEUX, VIN: vin.VIN });
+  } else {
+    // Fallback — affiche un message
+    document.getElementById('spif-loading').textContent = 'Impossible de charger les données — vérifiez les URLs Zoho.';
+  }
+});
 </script>

@@ -22,7 +22,7 @@ CATEGORIES = {
 }
 
 def load_data():
-    df = pd.read_csv(CSV_FILE)
+    df = pd.read_csv(CSV_FILE, encoding="utf-8-sig", quoting=0, on_bad_lines="skip")
     df["DATE DU JOUR"] = pd.to_datetime(df["DATE DU JOUR"]).dt.strftime("%Y-%m-%d")
     df = df.rename(columns={"Représentant":"Representant"})
     df["pct"] = pd.to_numeric(df["Succ avec stock"],errors="coerce") / pd.to_numeric(df["Total Succ"],errors="coerce")

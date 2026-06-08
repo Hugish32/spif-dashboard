@@ -10,7 +10,7 @@ from openpyxl.utils import get_column_letter
 
 PRODUITS = [
     ("15544570", "Beach Day Every Day Vodka Frozen Berries"),
-    ("14773",    "Mate Libre Eau Pétillante"),
+    ("14773",    "Mate Libre Eau Petillante"),
 ]
 
 CACHE_FILE = "saq_id_cache.json"
@@ -36,19 +36,21 @@ def get_internal_id(code_saq, cache):
     if code_saq in cache:
         return cache[code_saq]
     try:
-        r = SESSION.get(f"https://www.saq.com/en/{code_saq}", timeout=15, allow_redirects=True)
+        url = f"https://www.saq.com/fr/catalogsearch/result/?q={code_saq}"
+        r = SESSION.get(url, timeout=15, allow_redirects=True)
         match = re.search(r'context/product/id/(\d+)', r.text)
         if not match:
-            match = re.search(r'"product_id"\s*:\s*"?(\d+)"?', r.text)
+            match = re.search(r'product/(\d+)/store', r.text)
         if not match:
-            match = re.search(r'data-product-id="(\d+)"', r.text)
+            match = re.search(r'"entity_id"\s*:\s*"?(\d+)"?', r.text)
         if match:
             internal_id = match.group(1)
-            cache[code_saq] = internal_id
-            save_cache(cache)
-            return internal_id
+            if internal_id != code_saq:
+                cache[code_saq] = internal_id
+                save_cache(cache)
+                return internal_id
     except Exception as e:
-        print(f"  Erreur page produit : {e}")
+        print(f"  Erreur : {e}")
     return None
 
 def get_distribution(internal_id):
@@ -87,7 +89,7 @@ def build_excel(resultats, filepath):
     RED = "C00000"
 
     ws = wb.active
-    ws.title = "Résumé distribution"
+    ws.title = "Resume distribution"
     ws.merge_cells("A1:E1")
     ws["A1"] = f"Distribution SAQ — {datetime.today().strftime('%d %B %Y')}"
     ws["A1"].font = Font(name="Arial", size=13, bold=True, color=WHITE)
@@ -95,8 +97,9 @@ def build_excel(resultats, filepath):
     ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[1].height = 26
 
-    for col, h in enumerate(["Code SAQ", "Produit", "# Succursales", "Statut", "Erreur"], 1):
-        c = ws.cell(row=2, column=col, value=h)
+    headers = ["Code SAQ", "Produit", "# Succursales", "Statut", "Erreur"]
+    for col_idx, h in enumerate(headers, 1):
+        c = ws.cell(row=2, column=col_idx, value=h)
         c.font = Font(name="Arial", size=10, bold=True, color=WHITE)
         c.fill = PatternFill("solid", start_color=NAVY)
         c.alignment = Alignment(horizontal="center")
@@ -104,11 +107,11 @@ def build_excel(resultats, filepath):
     for i, r in enumerate(resultats, 3):
         fill = PatternFill("solid", start_color=GREY if i % 2 == 0 else WHITE)
         vals = [r["code"], r["nom"], r["total"], r["statut"], r["erreur"]]
-        for col, val in enumerate(vals, 1):
-            c = ws.cell(row=i, column=col, value=val)
+        for col_idx, val in enumerate(vals, 1):
+            c = ws.cell(row=i, column=col_idx, value=val)
             c.font = Font(name="Arial", size=10)
             c.fill = fill
-            c.alignment = Alignment(horizontal="center" if col in (1, 3) else "left")
+            c.alignment = Alignment(horizontal="center" if col_idx in (1, 3) else "left")
         nb = ws.cell(row=i, column=3)
         if r["total"] == 0:
             nb.font = Font(name="Arial", size=10, bold=True, color=RED)
@@ -116,12 +119,13 @@ def build_excel(resultats, filepath):
             nb.font = Font(name="Arial", size=10, bold=True, color=GREEN)
 
     col_widths = [14, 45, 15, 12, 40]
-    for idx, w in enumerate(col_widths, 1):
-        ws.column_dimensions[get_column_letter(idx)].width = w
+    for idx in range(1, 6):
+        ws.column_dimensions[get_column_letter(idx)].width = col_widths[idx - 1]
 
-    ws2 = wb.create_sheet("Détail succursales")
-    for col, h in enumerate(["Code SAQ", "Produit", "Succursale", "Type", "Ville", "Qté"], 1):
-        c = ws2.cell(row=1, column=col, value=h)
+    ws2 = wb.create_sheet("Detail succursales")
+    headers2 = ["Code SAQ", "Produit", "Succursale", "Type", "Ville", "Qte"]
+    for col_idx, h in enumerate(headers2, 1):
+        c = ws2.cell(row=1, column=col_idx, value=h)
         c.font = Font(name="Arial", size=10, bold=True, color=WHITE)
         c.fill = PatternFill("solid", start_color=NAVY)
         c.alignment = Alignment(horizontal="center")
@@ -129,36 +133,36 @@ def build_excel(resultats, filepath):
     row = 2
     for r in resultats:
         for s in r["stores"]:
-            for col, val in enumerate([r["code"], r["nom"], s["nom"], s["type"], s["ville"], s["qty"]], 1):
-                ws2.cell(row=row, column=col, value=val).font = Font(name="Arial", size=9)
+            vals = [r["code"], r["nom"], s["nom"], s["type"], s["ville"], s["qty"]]
+            for col_idx, val in enumerate(vals, 1):
+                ws2.cell(row=row, column=col_idx, value=val).font = Font(name="Arial", size=9)
             row += 1
 
     col_widths2 = [14, 38, 30, 18, 20, 8]
-    for idx, w in enumerate(col_widths2, 1):
-        ws2.column_dimensions[get_column_letter(idx)].width = w
+    for idx in range(1, 7):
+        ws2.column_dimensions[get_column_letter(idx)].width = col_widths2[idx - 1]
 
     wb.save(filepath)
-    print(f"\n✓ Fichier sauvegardé : {filepath}")
+    print(f"\nFichier sauvegarde : {filepath}")
 
 def main():
     cache = load_cache()
-    print(f"Cache existant : {len(cache)} ID(s) déjà connus\n")
-    print("─" * 55)
+    print(f"Cache existant : {len(cache)} ID(s) deja connus\n")
 
     resultats = []
     for i, (code, nom) in enumerate(PRODUITS, 1):
         print(f"[{i:02d}/{len(PRODUITS)}] {code} — {nom[:40]}")
         internal_id = get_internal_id(code, cache)
         if not internal_id:
-            print(f"       ✗ ID interne introuvable")
+            print(f"       X ID interne introuvable")
             resultats.append({"code": code, "nom": nom, "total": 0,
-                               "statut": "erreur_id", "erreur": "ID interne non trouvé", "stores": []})
+                               "statut": "erreur_id", "erreur": "ID interne non trouve", "stores": []})
             time.sleep(DELAI)
             continue
-        print(f"       ID interne : {internal_id}", end=" → ")
+        print(f"       ID interne : {internal_id}", end=" -> ")
         dispo = get_distribution(internal_id)
         if dispo["erreur"]:
-            print(f"✗ {dispo['erreur']}")
+            print(f"X {dispo['erreur']}")
             statut = "erreur_api"
         else:
             print(f"{dispo['total']} succursale(s)")
@@ -174,7 +178,7 @@ def main():
     build_excel(resultats, output)
     ok = sum(1 for r in resultats if r["statut"] == "ok")
     erreurs = sum(1 for r in resultats if r["statut"] != "ok")
-    print(f"\nRécap : {ok} produits OK · {erreurs} erreur(s)")
+    print(f"\nRecap : {ok} produits OK - {erreurs} erreur(s)")
 
 if __name__ == "__main__":
     main()

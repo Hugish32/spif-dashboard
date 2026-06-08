@@ -45,10 +45,10 @@ def get_internal_id(code_saq, cache):
     return code_saq
 
 def get_distribution(internal_id):
-url = (
-    f"https://www.saq.com/fr/store/locator/ajaxlist/context/sku/sku/{internal_id}"
-    f"?loaded=0&latitude=45.5088&longitude=-73.5540"
-)
+    url = (
+        f"https://www.saq.com/fr/store/locator/ajaxlist/context/sku/sku/{internal_id}"
+        f"?loaded=0&latitude=45.5088&longitude=-73.5540"
+    )
     try:
         r = SESSION.get(url, timeout=15)
         r.raise_for_status()

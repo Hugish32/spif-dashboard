@@ -1,0 +1,34 @@
+name: Distribution SAQ Hebdomadaire
+
+on:
+  schedule:
+    - cron: '0 21 * * 5'
+    - cron: '0 14 * * 6'
+  workflow_dispatch:
+
+jobs:
+  distribution:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Installer les dépendances
+        run: pip install requests openpyxl
+
+      - name: Rouler le script distribution
+        run: python3 saq_distribution.py
+
+      - name: Sauvegarder le rapport dans le repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Distribution_SAQ_*.xlsx saq_id_cache.json
+          git diff --staged --quiet || git commit -m "Distribution SAQ — $(date +'%Y-%m-%d')"
+          git push

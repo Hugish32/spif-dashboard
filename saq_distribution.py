@@ -571,7 +571,7 @@ def get_distribution(internal_id):
         r.raise_for_status()
         data = r.json()
         stores = data.get("list", [])
-        total = sum(1 for s in stores if s.get("qty", 0) > 0)
+        total = data.get("total", len(stores))
         return {
             "total": total,
             "stores": [

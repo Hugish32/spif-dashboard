@@ -47,7 +47,7 @@ def get_internal_id(code_saq, cache):
                 cache[code_saq] = m
                 save_cache(cache)
                 return m
-    patterns = re.findall(r'product/id/(\d+)', r.text)[:5]
+        patterns = re.findall(r'product/id/(\d+)', r.text)[:5]
         print(f"  HTML recu ({len(r.text)} chars), patterns trouves : {patterns}")
     except Exception as e:
         print(f"  Erreur : {e}")

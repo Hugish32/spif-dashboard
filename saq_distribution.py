@@ -14,6 +14,9 @@ PRODUITS = [
 ]
 
 CACHE_FILE = "saq_id_cache.json"
+ID_MAP = {
+    "15544570": "417396",
+}
 DELAI = 1.2
 
 SESSION = requests.Session()
@@ -33,24 +36,10 @@ def save_cache(cache):
         json.dump(cache, f, indent=2)
 
 def get_internal_id(code_saq, cache):
+    if code_saq in ID_MAP:
+        return ID_MAP[code_saq]
     if code_saq in cache:
         return cache[code_saq]
-    try:
-        r = SESSION.get(
-            f"https://www.saq.com/en/{code_saq}",
-            timeout=15,
-            allow_redirects=True
-        )
-        matches = re.findall(r'ajaxlist/context/product/id/(\d+)', r.text)
-        for m in matches:
-            if m != code_saq:
-                cache[code_saq] = m
-                save_cache(cache)
-                return m
-        patterns = re.findall(r'product/id/(\d+)', r.text)[:5]
-        print(f"  HTML recu ({len(r.text)} chars), patterns trouves : {patterns}")
-    except Exception as e:
-        print(f"  Erreur : {e}")
     return None
 
 def get_distribution(internal_id):

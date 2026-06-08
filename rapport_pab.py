@@ -85,7 +85,7 @@ def titre_page(ws, texte, couleur, nb_cols):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def charger_donnees():
-    df = pd.read_csv(FICHIER_CSV)
+    df = pd.read_csv(FICHIER_CSV, encoding="utf-8-sig")
     df.columns = df.columns.str.strip()
     rename = {c: c[2:] for c in df.columns if c.startswith('v.') or c.startswith('p.')}
     df = df.rename(columns=rename)

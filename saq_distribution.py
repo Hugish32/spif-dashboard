@@ -41,18 +41,13 @@ def get_internal_id(code_saq, cache):
             timeout=15,
             allow_redirects=True
         )
-        match = re.search(r'"id"\s*:\s*(\d{6,7})[^0-9]', r.text)
-        if not match:
-            match = re.search(r'ajaxlist/context/product/id/(\d+)', r.text)
-        if not match:
-            match = re.search(r'"product"\s*:\s*\{[^}]*"id"\s*:\s*(\d+)', r.text)
-        if match:
-            internal_id = match.group(1)
-            if internal_id != code_saq:
-                cache[code_saq] = internal_id
+        matches = re.findall(r'ajaxlist/context/product/id/(\d+)', r.text)
+        for m in matches:
+            if m != code_saq:
+                cache[code_saq] = m
                 save_cache(cache)
-                return internal_id
-        print(f"  HTML recu ({len(r.text)} chars), aucun ID trouve")
+                return m
+        print(f"  HTML recu ({len(r.text)} chars), patterns trouves : {re.findall(r'product/id/(\d+)', r.text)[:5]}")
     except Exception as e:
         print(f"  Erreur : {e}")
     return None

@@ -42,17 +42,13 @@ def save_cache(cache):
         json.dump(cache, f, indent=2)
 
 def get_internal_id(code_saq, cache):
-    if code_saq in ID_MAP:
-        return ID_MAP[code_saq]
-    if code_saq in cache:
-        return cache[code_saq]
-    return None
+    return code_saq
 
 def get_distribution(internal_id):
-    url = (
-        f"https://www.saq.com/en/store/locator/ajaxlist/context/product/id/{internal_id}"
-        f"?loaded=0&latitude=45.5088&longitude=-73.5540"
-    )
+url = (
+    f"https://www.saq.com/fr/store/locator/ajaxlist/context/sku/sku/{internal_id}"
+    f"?loaded=0&latitude=45.5088&longitude=-73.5540"
+)
     try:
         r = SESSION.get(url, timeout=15)
         r.raise_for_status()

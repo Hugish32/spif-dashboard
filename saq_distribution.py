@@ -36,19 +36,23 @@ def get_internal_id(code_saq, cache):
     if code_saq in cache:
         return cache[code_saq]
     try:
-        url = f"https://www.saq.com/fr/catalogsearch/result/?q={code_saq}"
-        r = SESSION.get(url, timeout=15, allow_redirects=True)
-        match = re.search(r'context/product/id/(\d+)', r.text)
+        r = SESSION.get(
+            f"https://www.saq.com/en/{code_saq}",
+            timeout=15,
+            allow_redirects=True
+        )
+        match = re.search(r'"id"\s*:\s*(\d{6,7})[^0-9]', r.text)
         if not match:
-            match = re.search(r'product/(\d+)/store', r.text)
+            match = re.search(r'ajaxlist/context/product/id/(\d+)', r.text)
         if not match:
-            match = re.search(r'"entity_id"\s*:\s*"?(\d+)"?', r.text)
+            match = re.search(r'"product"\s*:\s*\{[^}]*"id"\s*:\s*(\d+)', r.text)
         if match:
             internal_id = match.group(1)
             if internal_id != code_saq:
                 cache[code_saq] = internal_id
                 save_cache(cache)
                 return internal_id
+        print(f"  HTML recu ({len(r.text)} chars), aucun ID trouve")
     except Exception as e:
         print(f"  Erreur : {e}")
     return None

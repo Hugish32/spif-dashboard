@@ -555,24 +555,12 @@ def save_cache(cache):
         json.dump(cache, f, indent=2)
 
 def get_internal_id(code_saq, cache):
+    if code_saq in ID_MAP:
+        return ID_MAP[code_saq]
     if code_saq in cache:
         return cache[code_saq]
-    try:
-        r = SESSION.get(
-            f"https://www.saq.com/fr/{code_saq}",
-            timeout=15,
-            allow_redirects=True
-        )
-        match = re.search(r'"productId"\s*:\s*(\d+)', r.text)
-        if match:
-            internal_id = match.group(1)
-            cache[code_saq] = internal_id
-            save_cache(cache)
-            return internal_id
-    except Exception as e:
-        print(f"  Erreur : {e}")
     return None
-    
+
 def get_distribution(internal_id):
     url = (
     f"https://www.saq.com/en/store/locator/ajaxlist/context/product/id/{internal_id}"
